@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# 金鑰與本機設定：絕對不要提交
+.env
+backend/.env
+
+# 編輯器與系統
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
