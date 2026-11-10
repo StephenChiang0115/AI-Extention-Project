@@ -1,5 +1,6 @@
 import base64
 import binascii
+import logging
 import os
 import re
 import time
@@ -14,6 +15,7 @@ from .schemas import IdentifyRequest, IdentifyResponse, Quota
 from .store import LogEntry, MemoryStore, Store, next_reset_iso
 
 load_dotenv()  # 讀取 backend/.env（若存在）；系統環境變數優先
+log = logging.getLogger("landmark_guide")
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024   # 單張框選影像上限 2 MB
 CACHE_MIN_CONFIDENCE = 0.6          # 信心不足或無法辨識的結果不寫入快取
@@ -74,6 +76,7 @@ def create_app(provider: VisionProvider | None = None, store: Store | None = Non
             try:
                 script = await provider.identify(raw, req.page_url)
             except Exception:
+                log.exception("模型辨識失敗（provider=%s）", type(provider).__name__)
                 store.quota_refund(x_client_id)  # 辨識失敗不應吃掉使用者額度
                 raise HTTPException(status_code=502, detail="辨識服務暫時無法使用，請稍後再試")
             if script.landmark_name is not None and script.confidence >= CACHE_MIN_CONFIDENCE:

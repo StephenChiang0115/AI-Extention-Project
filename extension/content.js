@@ -7,7 +7,7 @@
 
   const EMOTION_COLOR = { excited: "#f5a623", calm: "#4a90d9", curious: "#7b61c9", apologetic: "#9aa5b1" };
 
-  let host, root, overlay, box, panel, selecting = false, script = null, typer = null;
+  let host, root, overlay, box, panel, selecting = false, script = null, typer = null, skipTyping = null;
 
   // ---------- 掛載 Shadow DOM ----------
   function mount() {
@@ -135,7 +135,12 @@
   }
 
   // ---------- 角色面板 ----------
-  function stopTyping() { if (typer) { clearInterval(typer); typer = null; } }
+  // 停止打字動畫，並移除「點一下顯示全文」的監聽器。
+  // 監聽器若殘留，之後點文字框會把上一步的台詞與選項蓋回來。
+  function stopTyping() {
+    if (typer) { clearInterval(typer); typer = null; }
+    if (skipTyping) { skipTyping.target.removeEventListener("click", skipTyping.fn); skipTyping = null; }
+  }
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -162,12 +167,22 @@
   }
 
   function typeText(target, full, done) {
-    let i = 0;
+    stopTyping();
+    let i = 0, finished = false;
+    // 打完或被點擊時只結束一次，避免 done 被呼叫兩次而出現重複的選項按鈕
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      stopTyping();
+      target.textContent = full;
+      done?.();
+    };
     typer = setInterval(() => {
       target.textContent = full.slice(0, ++i);
-      if (i >= full.length) { stopTyping(); done?.(); }
+      if (i >= full.length) finish();
     }, 18);
-    target.addEventListener("click", () => { stopTyping(); target.textContent = full; done?.(); }, { once: true });
+    skipTyping = { target, fn: finish };
+    target.addEventListener("click", finish);
   }
 
   function addChoice(container, label, onClick) {

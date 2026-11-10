@@ -8,7 +8,13 @@
 3. 在任何 http／https 網頁點工具列的擴充功能圖示（或按 Alt+Shift+L），拖曳框選畫面。mock 模式下不論框選什麼，都會回傳「台北 101」，用來驗證流程。
 4. 想看統計：瀏覽器打開 `http://localhost:8080/api/stats`。
 
-執行測試：雙擊 `run-tests.bat`（16 項）。
+執行測試：雙擊 `run-tests.bat`（31 項）。
+
+## 接上 LM Studio（真實 AI 辨識）
+1. 在 LM Studio 下載並載入**支援圖片輸入**的模型（例如 Qwen2.5-VL、Gemma 3）。
+2. 到 Developer 分頁按 Start Server（預設 `http://localhost:1234`）。
+3. 把 `backend/.env` 的 `PROVIDER=mock` 改成 `PROVIDER=lmstudio`，重新執行 `start-backend.bat`。
+4. 框選地標測試。辨識失敗時後端視窗會印出原因，使用者額度會自動退還。
 
 ## 設定
 複製 `backend/.env.example` 成 `backend/.env`（第一次啟動時會自動建立），可調整每日免費額度、快取存活時間、雜湊門檻等。金鑰只放這個檔案，不要提交到版本控制。
@@ -24,4 +30,4 @@
 - [x] 階段 3：快取與每日額度
 - [ ] 階段 4：部署到雲端
 - [ ] 階段 5：壓測與成本統計
-- [ ] 階段 6：接上真實模型（LM Studio）
+- [~] 階段 6：接上真實模型（LM Studio）：程式已完成，待真實模型實測
