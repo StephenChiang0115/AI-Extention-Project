@@ -124,7 +124,7 @@
     showMessage("讓我看看這是什麼地方…", "calm");
     try {
       const image = await captureCrop(r);
-      const resp = await chrome.runtime.sendMessage({ type: "identify", image, pageUrl: location.href });
+      const resp = await chrome.runtime.sendMessage({ type: "identify", image, pageUrl: location.href, pageTitle: document.title });
       if (resp?.quotaExceeded) return showQuotaExceeded(resp.quota);
       if (!resp?.ok) throw new Error(resp?.error || "辨識失敗");
       script = resp.data;

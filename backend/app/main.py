@@ -74,7 +74,7 @@ def create_app(provider: VisionProvider | None = None, store: Store | None = Non
                     "quota": quota_info(x_client_id).model_dump(),
                 })
             try:
-                script = await provider.identify(raw, req.page_url)
+                script = await provider.identify(raw, req.page_url, req.page_title)
             except Exception:
                 log.exception("模型辨識失敗（provider=%s）", type(provider).__name__)
                 store.quota_refund(x_client_id)  # 辨識失敗不應吃掉使用者額度

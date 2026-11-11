@@ -8,7 +8,7 @@
 3. 在任何 http／https 網頁點工具列的擴充功能圖示（或按 Alt+Shift+L），拖曳框選畫面。mock 模式下不論框選什麼，都會回傳「台北 101」，用來驗證流程。
 4. 想看統計：瀏覽器打開 `http://localhost:8080/api/stats`。
 
-執行測試：雙擊 `run-tests.bat`（31 項）。
+執行測試：雙擊 `run-tests.bat`（33 項）。
 
 ## 接上 LM Studio（真實 AI 辨識）
 1. 在 LM Studio 下載並載入**支援圖片輸入**的模型（例如 Qwen2.5-VL、Gemma 3）。

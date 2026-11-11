@@ -32,7 +32,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const res = await fetch(`${await apiBase()}/api/identify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Client-Id": await clientId() },
-        body: JSON.stringify({ image: msg.image, pageUrl: msg.pageUrl }),
+        body: JSON.stringify({ image: msg.image, pageUrl: msg.pageUrl, pageTitle: msg.pageTitle }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

@@ -8,6 +8,7 @@ Emotion = Literal["excited", "calm", "curious", "apologetic"]
 class IdentifyRequest(BaseModel):
     image: str = Field(..., description="框選區域的 Base64 影像（可含 data URL 前綴）")
     page_url: Optional[str] = Field(None, alias="pageUrl", description="當前網頁 URL，作為辨識脈絡")
+    page_title: Optional[str] = Field(None, alias="pageTitle", description="當前網頁標題，作為辨識脈絡")
 
     model_config = {"populate_by_name": True}
 

@@ -44,11 +44,11 @@ class CountingProvider(VisionProvider):
         self.calls, self.fail, self.conf, self.name = 0, fail, conf, name
         self.inner = inner or MockProvider()
 
-    async def identify(self, image_bytes, page_url):
+    async def identify(self, image_bytes, page_url, page_title=None):
         self.calls += 1
         if self.fail:
             raise RuntimeError("boom")
-        s = await self.inner.identify(image_bytes, page_url)
+        s = await self.inner.identify(image_bytes, page_url, page_title)
         return s.model_copy(update={"confidence": self.conf, "landmark_name": self.name})
 
 

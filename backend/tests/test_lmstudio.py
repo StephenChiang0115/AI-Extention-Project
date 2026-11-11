@@ -198,3 +198,23 @@ def test_get_provider_from_env(monkeypatch):
     monkeypatch.setenv("PROVIDER", "lmstudoi")
     with pytest.raises(RuntimeError, match="未知的 PROVIDER"):
         get_provider()
+
+
+# ---------- 網頁脈絡 ----------
+def test_page_title_and_decoded_url_sent_to_model():
+    fake = FakeLMStudio()
+    url = "https://www.google.com/maps/place/%E5%9C%93%E5%B1%B1%E5%A4%A7%E9%A3%AF%E5%BA%97/@25.07,121.52"
+    run(provider(fake, model="m").identify(jpeg(), url, "圓山大飯店 - Google 地圖"))
+    text = fake.requests[0][1]["messages"][1]["content"][0]["text"]
+    assert "網頁標題：圓山大飯店 - Google 地圖" in text
+    assert "maps/place/圓山大飯店" in text and "%E5" not in text
+
+
+def test_api_passes_page_title_and_accepts_long_title():
+    fake = FakeLMStudio()
+    c, _ = make_api(fake)
+    r = c.post("/api/identify", headers=H, json={
+        "image": base64.b64encode(jpeg()).decode(), "pageUrl": "https://example.com", "pageTitle": "圓山大飯店" + "很長" * 400})
+    assert r.status_code == 200
+    text = fake.requests[0][1]["messages"][1]["content"][0]["text"]
+    assert "網頁標題：圓山大飯店" in text and len(text) < 2000

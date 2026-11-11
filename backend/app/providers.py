@@ -5,6 +5,7 @@ import json
 import os
 import re
 from abc import ABC, abstractmethod
+from urllib.parse import unquote
 
 import httpx
 from PIL import Image
@@ -14,13 +15,13 @@ from .schemas import Character, Choice, Script, Step
 
 class VisionProvider(ABC):
     @abstractmethod
-    async def identify(self, image_bytes: bytes, page_url: str | None) -> Script: ...
+    async def identify(self, image_bytes: bytes, page_url: str | None, page_title: str | None = None) -> Script: ...
 
 
 class MockProvider(VisionProvider):
     """不需要 API 金鑰的假資料；用於開發、測試與前端串接。"""
 
-    async def identify(self, image_bytes: bytes, page_url: str | None) -> Script:
+    async def identify(self, image_bytes: bytes, page_url: str | None, page_title: str | None = None) -> Script:
         return Script(
             landmark_name="台北 101",
             confidence=0.93,
@@ -102,7 +103,10 @@ SYSTEM_PROMPT = """你是「AI 景點導覽精靈」的編劇。使用者在網�
    - 最後的步驟 choices 為空陣列 []。
    - 每段 dialogue 不超過 80 個字。
 7. 只說你有把握的事實；不確定的數字或年份寧可不提。
-8. 如果 landmark_name 是 null：confidence 填 0.2 以下，sequence_steps 填 []。
+8. 使用者正在瀏覽的網頁標題與網址常會直接寫出地點名稱。如果它和圖片內容吻合，請以它為準；
+   如果和圖片明顯無關（例如影片標題與畫面無關），就只依圖片判斷。
+9. 外觀相似的建築很多（例如中國宮殿式建築），不要直接猜最有名的那一個；沒有把握時降低 confidence。
+10. 如果 landmark_name 是 null：confidence 填 0.2 以下，sequence_steps 填 []。
 
 輸出範例：
 {"landmark_name":"台北 101","confidence":0.93,"character":{"name":"101 導覽精靈","avatar_emotion":"excited"},
@@ -191,6 +195,22 @@ def parse_script(text: str) -> Script:
                   character=Character(name=char_name, avatar_emotion=emotion), sequence_steps=steps)
 
 
+def page_context(page_url: str | None, page_title: str | None) -> str:
+    """把網頁標題與網址整理成給模型的參考文字。
+
+    網址會先解碼：瀏覽器送來的是 %E5%9C%93... 這種編碼，模型看不懂，
+    解碼後才看得到「圓山大飯店」這類地名。
+    """
+    lines = []
+    if page_title and page_title.strip():
+        lines.append(f"網頁標題：{page_title.strip()[:200]}")
+    if page_url:
+        lines.append(f"網址：{unquote(page_url)[:300]}")
+    if not lines:
+        return ""
+    return "\n\n使用者正在瀏覽的網頁（參考脈絡）：\n" + "\n".join(lines)
+
+
 class LMStudioProvider(VisionProvider):
     """呼叫 LM Studio 的本機伺服器（OpenAI 相容的 /v1/chat/completions）。
 
@@ -226,10 +246,8 @@ class LMStudioProvider(VisionProvider):
         self.model = ids[0]
         return self.model
 
-    async def identify(self, image_bytes: bytes, page_url: str | None) -> Script:
-        user_text = "請辨識這張圖片中的地標，並依規則輸出導覽劇本 JSON。"
-        if page_url:
-            user_text += f"\n（使用者正在瀏覽的網頁：{page_url[:300]}，可作為參考脈絡）"
+    async def identify(self, image_bytes: bytes, page_url: str | None, page_title: str | None = None) -> Script:
+        user_text = "請辨識這張圖片中的地標，並依規則輸出導覽劇本 JSON。" + page_context(page_url, page_title)
 
         async with self._client() as client:
             body = {
@@ -267,7 +285,7 @@ class GeminiProvider(VisionProvider):
     def __init__(self, api_key: str, model: str):
         self.api_key, self.model = api_key, model
 
-    async def identify(self, image_bytes: bytes, page_url: str | None) -> Script:
+    async def identify(self, image_bytes: bytes, page_url: str | None, page_title: str | None = None) -> Script:
         raise NotImplementedError("Gemini 串接尚未實作。請使用 PROVIDER=lmstudio 或 PROVIDER=mock。")
 
 

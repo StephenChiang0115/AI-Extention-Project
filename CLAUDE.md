@@ -19,7 +19,7 @@ AI 景點導覽精靈：Chrome 擴充功能（Manifest V3）。使用者在任�
 - `backend/app/phash.py`：dHash 與漢明距離
 - `backend/app/schemas.py`：請求／回應與劇本 JSON 結構
 - `backend/tests/test_api.py`：API、快取、額度測試（16 項）
-- `backend/tests/test_lmstudio.py`：LM Studio Provider 測試，用假的 HTTP 傳輸層，不需開模型（15 項）
+- `backend/tests/test_lmstudio.py`：LM Studio Provider 測試，用假的 HTTP 傳輸層，不需開模型（17 項）
 - `extension/`：`background.js`（截圖、呼叫後端）、`content.js`（框選、裁切、Shadow DOM 角色）、`options.*`（後端網址設定）
 
 ## 常用指令（Windows）
@@ -45,6 +45,7 @@ AI 景點導覽精靈：Chrome 擴充功能（Manifest V3）。使用者在任�
 - 擴充功能的 `manifest.json` 的 `host_permissions` 只包含 localhost 與 `*.run.app`；部署到其他網域要加。
 - 模型回傳的 JSON 格式不完整時，`parse_script` 會修正（百分比信心值、不存在的 next_step、未知情緒等）；修不了就回 502 並退還額度。
 - 不支援 `response_format` 結構化輸出的模型會自動退回純提示詞模式。
+- 辨識時會把網頁標題與「解碼後」的網址一起給模型當脈絡（例如 Google 地圖網址含地名）。實測 gemma-4-e4b 只看圖片時，把圓山大飯店認成紫禁城。
 - 純色或幾乎沒有紋理的框選（天空、黑畫面）dHash 都接近 0，彼此會誤命中快取。真實模型對這類圖通常回傳無法辨識（不會寫入快取），風險不大，但可考慮對低紋理影像跳過快取。
 - 尚未在真實 YouTube 頁面實測；端到端測試是在模擬頁面上做的（Chrome 的本機網路限制讓測試頁不能直接呼叫 localhost，真實的擴充功能背景腳本不受此限）。
 
