@@ -7,7 +7,7 @@ import json
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.main import create_app
 from app.providers import LMStudioProvider, get_provider, parse_script
@@ -28,7 +28,9 @@ GOOD = {
 
 def jpeg() -> bytes:
     buf = io.BytesIO()
-    Image.new("RGB", (64, 48), (200, 80, 40)).save(buf, "JPEG")
+    img = Image.new("RGB", (64, 48), (200, 80, 40))
+    ImageDraw.Draw(img).rectangle([10, 8, 30, 40], fill=(20, 20, 120))  # 要有紋理，純色圖不走快取
+    img.save(buf, "JPEG")
     return buf.getvalue()
 
 

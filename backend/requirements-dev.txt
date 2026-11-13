@@ -1,0 +1,4 @@
+# 開發與測試用套件：包含所有執行期套件，再加上測試工具。
+# 容器映像只安裝 requirements.txt，不會包含這裡的測試工具。
+-r requirements.txt
+pytest==9.2.0

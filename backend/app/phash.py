@@ -2,7 +2,7 @@
 import hashlib
 import io
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageStat, UnidentifiedImageError
 
 
 def dhash(image_bytes: bytes) -> int:
@@ -17,6 +17,16 @@ def dhash(image_bytes: bytes) -> int:
         for col in range(8):
             bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
     return bits
+
+
+def is_low_texture(image_bytes: bytes, threshold: float = 8.0) -> bool:
+    """純色或幾乎沒有紋理的影像（天空、黑畫面）：dHash 都接近 0，彼此會誤命中快取。
+    轉灰階縮成 32x32 後，亮度標準差小於 threshold 即視為低紋理。無法解碼時回傳 False。"""
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("L").resize((32, 32), Image.LANCZOS)
+    except (UnidentifiedImageError, OSError, ValueError):
+        return False
+    return ImageStat.Stat(img).stddev[0] < threshold
 
 
 def hamming(a: int, b: int) -> int:

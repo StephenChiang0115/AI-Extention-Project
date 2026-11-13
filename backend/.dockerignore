@@ -1,0 +1,10 @@
+# 不放進映像的檔案：金鑰、本機虛擬環境、測試與快取
+.env
+.env.*
+.venv
+tests
+__pycache__
+*.pyc
+.pytest_cache
+Dockerfile
+.dockerignore

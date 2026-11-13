@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .phash import dhash
+from .phash import dhash, is_low_texture
 from .providers import VisionProvider, get_provider
 from .schemas import IdentifyRequest, IdentifyResponse, Quota
 from .store import LogEntry, MemoryStore, Store, next_reset_iso
@@ -19,7 +19,8 @@ log = logging.getLogger("landmark_guide")
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024   # 單張框選影像上限 2 MB
 CACHE_MIN_CONFIDENCE = 0.6          # 信心不足或無法辨識的結果不寫入快取
-CLIENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+LOW_TEXTURE_STDDEV = float(os.getenv("LOW_TEXTURE_STDDEV", "8"))  # 低於此亮度標準差不使用快取
+CLIENT_ID_RE =re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 
 def decode_image(data: str) -> bytes:
@@ -44,8 +45,16 @@ def create_app(provider: VisionProvider | None = None, store: Store | None = Non
         hamming_threshold=int(os.getenv("HAMMING_THRESHOLD", "6")),
     )
     app = FastAPI(title="AI Landmark Guide API", version="0.2.0")
-    # MVP 階段開放所有來源；上線前應限縮為 Extension 的 chrome-extension://<id>
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    # CORS 只是瀏覽器端加固，不是認證（擴充功能背景腳本有 host_permissions，不受 CORS 限制）。
+    # ALLOWED_ORIGINS 以逗號分隔，例如 chrome-extension://<擴充功能 ID>；未設定時只允許任一擴充功能來源。
+    origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_origin_regex=None if origins else r"^chrome-extension://[a-p]{32}$",
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "X-Client-Id", "X-Admin-Token"],
+    )
     limit = getattr(store, "daily_limit", 0)
 
     def quota_info(client_id: str) -> Quota:
@@ -62,8 +71,10 @@ def create_app(provider: VisionProvider | None = None, store: Store | None = Non
         raw = decode_image(req.image)
         t0 = time.perf_counter()
         ph = dhash(raw)
+        # 低紋理影像的雜湊幾乎都一樣，不查也不寫快取，避免彼此誤命中
+        cacheable = not is_low_texture(raw, LOW_TEXTURE_STDDEV)
 
-        script = store.cache_get(ph)
+        script = store.cache_get(ph) if cacheable else None
         hit = script is not None
         if not hit:
             # 只有「會產生 API 費用」的未命中請求才扣額度；命中快取不扣
@@ -79,7 +90,7 @@ def create_app(provider: VisionProvider | None = None, store: Store | None = Non
                 log.exception("模型辨識失敗（provider=%s）", type(provider).__name__)
                 store.quota_refund(x_client_id)  # 辨識失敗不應吃掉使用者額度
                 raise HTTPException(status_code=502, detail="辨識服務暫時無法使用，請稍後再試")
-            if script.landmark_name is not None and script.confidence >= CACHE_MIN_CONFIDENCE:
+            if cacheable and script.landmark_name is not None and script.confidence >= CACHE_MIN_CONFIDENCE:
                 store.cache_put(ph, script)
 
         latency = int((time.perf_counter() - t0) * 1000)

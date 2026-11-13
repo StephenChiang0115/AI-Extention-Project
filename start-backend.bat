@@ -4,7 +4,7 @@ cd /d "%~dp0backend"
 
 where py >nul 2>nul
 if errorlevel 1 (
-  echo [錯誤] 找不到 Python。請先安裝 Python 3.10 以上版本，並勾選 Add to PATH。
+  echo [錯誤] 找不到 Python。請先安裝 Python 3.11 以上版本，並勾選 Add to PATH。
   pause
   exit /b 1
 )

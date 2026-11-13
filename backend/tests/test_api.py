@@ -200,3 +200,38 @@ def test_stats_requires_token_when_set(monkeypatch):
     c, _, _ = make()
     assert c.get("/api/stats").status_code == 403
     assert c.get("/api/stats", headers={"X-Admin-Token": "secret"}).status_code == 200
+
+
+def test_low_texture_detection():
+    from app.phash import is_low_texture
+    raw = lambda img: base64.b64decode(b64(img))
+    assert is_low_texture(raw(Image.new("RGB", (200, 200), (135, 206, 235))))
+    assert is_low_texture(raw(Image.new("RGB", (200, 200), (0, 0, 0))))
+    assert not is_low_texture(raw(tower())) and not is_low_texture(raw(bridge()))
+    assert not is_low_texture(b"not an image")
+
+
+def test_low_texture_image_skips_cache():
+    c, prov, store = make(limit=9)
+    sky = b64(Image.new("RGB", (200, 200), (135, 206, 235)))
+    black = b64(Image.new("RGB", (200, 200), (0, 0, 0)))
+    for img in (sky, sky, black):
+        r = c.post("/api/identify", json={"image": img, "page_url": "https://x.test"}, headers=H).json()
+        assert r["cache_hit"] is False
+    assert prov.calls == 3 and store.stats()["cached_landmarks"] == 0
+
+
+def test_cors_defaults_to_extension_origins(monkeypatch):
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+    c, _, _ = make()
+    ext = "chrome-extension://" + "a" * 32
+    assert c.get("/health", headers={"Origin": ext}).headers.get("access-control-allow-origin") == ext
+    assert "access-control-allow-origin" not in c.get("/health", headers={"Origin": "https://evil.test"}).headers
+
+
+def test_cors_uses_allowed_origins_env(monkeypatch):
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://a.test, https://b.test")
+    c, _, _ = make()
+    assert c.get("/health", headers={"Origin": "https://b.test"}).headers.get("access-control-allow-origin") == "https://b.test"
+    ext = "chrome-extension://" + "a" * 32
+    assert "access-control-allow-origin" not in c.get("/health", headers={"Origin": ext}).headers
