@@ -220,13 +220,16 @@ class LMStudioProvider(VisionProvider):
 
     def __init__(self, base_url: str = "http://localhost:1234/v1", model: str | None = None,
                  timeout_s: float = 120.0, api_key: str | None = None,
-                 transport: httpx.AsyncBaseTransport | None = None):
+                 transport: httpx.AsyncBaseTransport | None = None,
+                 reasoning_effort: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.model = model or None
         self.timeout_s = timeout_s
         self.api_key = api_key
         self.transport = transport  # 測試用：注入假的 HTTP 傳輸層
         self.use_schema = True      # 伺服器不支援結構化輸出時，會自動改為 False
+        # 例如 Gemini 2.5 Flash-Lite 設 "none" 關閉思考，避免思考 token 吃掉 max_tokens；LM Studio 不需要設
+        self.reasoning_effort = reasoning_effort or None
 
     def _client(self) -> httpx.AsyncClient:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
@@ -242,7 +245,7 @@ class LMStudioProvider(VisionProvider):
         ids = [m.get("id") for m in r.json().get("data", []) if m.get("id")]
         ids = [i for i in ids if "embed" not in i.lower()]
         if not ids:
-            raise RuntimeError("LM Studio 沒有載入任何模型，請先在 LM Studio 載入支援圖片的模型")
+            raise RuntimeError("找不到可用的模型：LM Studio 請先載入支援圖片的模型；雲端服務請設定 LMSTUDIO_MODEL")
         self.model = ids[0]
         return self.model
 
@@ -263,16 +266,21 @@ class LMStudioProvider(VisionProvider):
                 "max_tokens": 1500,
                 "stream": False,
             }
+            if self.reasoning_effort:
+                body["reasoning_effort"] = self.reasoning_effort
             if self.use_schema:
                 body["response_format"] = {"type": "json_schema", "json_schema": {
                     "name": "landmark_script", "strict": True, "schema": SCRIPT_JSON_SCHEMA}}
 
             r = await client.post("/chat/completions", json=body)
             if r.status_code == 400 and "response_format" in body:
-                # 部分模型或版本不支援結構化輸出：改用純提示詞，之後不再嘗試
-                self.use_schema = False
+                # 部分模型或版本不支援結構化輸出：改用純提示詞重試。
+                # 只有重試成功才永久關閉；金鑰錯誤等其他 400（例如 Gemini 金鑰無效回 400）重試也會失敗，
+                # 不應因此把結構化輸出關掉
                 body.pop("response_format")
                 r = await client.post("/chat/completions", json=body)
+                if r.is_success:
+                    self.use_schema = False
             r.raise_for_status()
             content = r.json()["choices"][0]["message"].get("content") or ""
 
@@ -298,6 +306,7 @@ def get_provider() -> VisionProvider:
             base_url=os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
             model=os.getenv("LMSTUDIO_MODEL") or None,
             timeout_s=float(os.getenv("LMSTUDIO_TIMEOUT_S", "120")),
+            reasoning_effort=os.getenv("LMSTUDIO_REASONING_EFFORT") or None,
             api_key=os.getenv("LMSTUDIO_API_KEY") or None,
         )
     if name == "gemini":

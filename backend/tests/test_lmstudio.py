@@ -109,7 +109,7 @@ def test_falls_back_when_structured_output_unsupported():
 
 
 def test_no_model_loaded_raises():
-    with pytest.raises(RuntimeError, match="沒有載入"):
+    with pytest.raises(RuntimeError, match="找不到可用的模型"):
         run(provider(FakeLMStudio(models=())).identify(jpeg(), None))
 
 
@@ -220,3 +220,30 @@ def test_api_passes_page_title_and_accepts_long_title():
     assert r.status_code == 200
     text = fake.requests[0][1]["messages"][1]["content"][0]["text"]
     assert "網頁標題：圓山大飯店" in text and len(text) < 2000
+
+
+# ---------- 400 處理與 reasoning_effort ----------
+def test_bad_key_400_does_not_permanently_disable_schema():
+    """Gemini 金鑰無效回 400：純提示詞重試也失敗，不應把結構化輸出永久關掉。"""
+    fake = FakeLMStudio(status=400)
+    p = provider(fake, model="m")
+    with pytest.raises(httpx.HTTPStatusError):
+        run(p.identify(jpeg(), None))
+    assert p.use_schema is True
+    fake.status = 200
+    run(p.identify(jpeg(), None))
+    assert "response_format" in fake.requests[-1][1]
+
+
+def test_schema_disabled_only_after_successful_retry():
+    p = provider(FakeLMStudio(reject_schema=True), model="m")
+    run(p.identify(jpeg(), None))
+    assert p.use_schema is False
+
+
+def test_reasoning_effort_sent_only_when_set():
+    fake = FakeLMStudio()
+    run(provider(fake, model="m").identify(jpeg(), None))
+    assert "reasoning_effort" not in fake.requests[-1][1]
+    run(provider(fake, model="m", reasoning_effort="none").identify(jpeg(), None))
+    assert fake.requests[-1][1]["reasoning_effort"] == "none"

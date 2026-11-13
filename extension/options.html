@@ -1,10 +1,13 @@
 <!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><title>導覽精靈設定</title>
 <style>body{font-family:system-ui,"Noto Sans TC",sans-serif;max-width:480px;margin:40px auto;padding:0 16px}
-input{width:100%;padding:8px;margin:6px 0 12px;box-sizing:border-box}button{padding:8px 16px}#msg{color:#2e7d32;margin-left:8px}</style></head>
+input{width:100%;padding:8px;margin:6px 0 12px;box-sizing:border-box}button{padding:8px 16px}#msg{color:#2e7d32;margin-left:8px}
+.hint{color:#666;font-size:13px}code{background:#f2f2f2;padding:1px 4px;border-radius:3px}</style></head>
 <body><h2>導覽精靈設定</h2>
 <label for="api">後端 API 位址</label>
-<input id="api" placeholder="http://localhost:8080">
-<p style="color:#666;font-size:13px">部署到雲端後，改成 Cloud Run 的網址（https://…run.app）。</p>
+<input id="api" type="url" placeholder="http://localhost:8080">
+<p class="hint">本機開發：<code>http://localhost:8080</code><br>
+雲端（Render）：<code>https://你的服務名稱.onrender.com</code>（結尾不用加斜線）<br>
+免費雲端閒置 15 分鐘會休眠，第一次辨識可能要等約 1 分鐘。</p>
 <button id="save">儲存</button><span id="msg"></span>
 <script src="options.js"></script></body></html>

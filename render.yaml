@@ -1,0 +1,37 @@
+# Render Blueprint：後端以 Docker 部署到 Render 免費方案（不需信用卡）
+# 使用方式：Render 控制台 → New → Blueprint → 選這個 GitHub 儲存庫。詳見 docs/deploy.md
+# 注意：這個檔案會提交到版本控制，絕對不要在這裡填入任何金鑰或連線字串。
+services:
+  - type: web
+    name: landmark-backend
+    runtime: docker
+    plan: free
+    region: singapore           # 離台灣最近；Neon 也選新加坡，資料庫延遲最低
+    rootDir: backend            # 只有 backend/ 變動時才重新部署
+    dockerContext: backend      # 以下兩個路徑都相對於儲存庫根目錄
+    dockerfilePath: backend/Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true            # 推送到 GitHub 後自動重新部署
+    envVars:
+      # ---- 一般設定（可公開）----
+      - key: STORE
+        value: postgres
+      - key: PROVIDER
+        value: lmstudio         # 沿用 OpenAI 相容的 LMStudioProvider 呼叫 Gemini
+      - key: LMSTUDIO_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: LMSTUDIO_MODEL
+        value: gemini-2.5-flash-lite   # 必須指定；Gemini 的 /models 會列出很多模型
+      - key: LMSTUDIO_TIMEOUT_S
+        value: "60"
+      - key: DAILY_FREE_LIMIT
+        value: "5"
+      - key: LOW_TEXTURE_STDDEV
+        value: "8"
+      # ---- 機密（sync: false：只在第一次建立 Blueprint 時於控制台填寫，不會寫進這個檔案）----
+      - key: DATABASE_URL       # Neon 的 pooled 連線字串（含 sslmode=require）
+        sync: false
+      - key: LMSTUDIO_API_KEY   # Google AI Studio 的 Gemini API 金鑰
+        sync: false
+      - key: ADMIN_TOKEN        # 保護 /api/stats 的管理者權杖，自行產生一串隨機字
+        sync: false

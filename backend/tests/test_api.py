@@ -235,3 +235,140 @@ def test_cors_uses_allowed_origins_env(monkeypatch):
     assert c.get("/health", headers={"Origin": "https://b.test"}).headers.get("access-control-allow-origin") == "https://b.test"
     ext = "chrome-extension://" + "a" * 32
     assert "access-control-allow-origin" not in c.get("/health", headers={"Origin": ext}).headers
+
+
+# ---------- 並行未命中合併（in-flight coalescing） ----------
+import asyncio
+
+import httpx
+
+
+class SlowProvider(VisionProvider):
+    """會等待一段時間的假模型；outcomes 依序指定每次呼叫的結果：'ok'、'fail'、'low'。"""
+
+    def __init__(self, outcomes=("ok",), delay=0.2):
+        self.calls, self.outcomes, self.delay = 0, list(outcomes), delay
+        self.inner = MockProvider()
+
+    async def identify(self, image_bytes, page_url, page_title=None):
+        kind = self.outcomes[min(self.calls, len(self.outcomes) - 1)]
+        self.calls += 1
+        await asyncio.sleep(self.delay)
+        if kind == "fail":
+            raise RuntimeError("boom")
+        s = await self.inner.identify(image_bytes, page_url, page_title)
+        return s.model_copy(update={"confidence": 0.3 if kind == "low" else 0.93, "landmark_name": "台北 101"})
+
+
+def _concurrent(prov, store, n=2, image=None):
+    """以 httpx.AsyncClient + ASGITransport 同時送出 n 個相同影像的請求。"""
+    app = create_app(prov, store)
+    body = {"image": image or b64(tower())}
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+            return await asyncio.gather(*[c.post("/api/identify", json=body, headers=H) for _ in range(n)])
+
+    return asyncio.run(run())
+
+
+def test_concurrent_same_image_calls_model_once():
+    prov, store = SlowProvider(["ok"]), MemoryStore(daily_limit=5)
+    rs = _concurrent(prov, store)
+    assert [r.status_code for r in rs] == [200, 200]
+    assert prov.calls == 1, "同一張圖同時未命中，只應呼叫一次模型"
+    assert sorted(r.json()["cache_hit"] for r in rs) == [False, True]
+    assert store.quota_remaining("client-abcdefgh") == 4, "只應扣一次額度"
+
+
+def test_concurrent_first_fails_second_processes_itself():
+    prov, store = SlowProvider(["fail", "ok"]), MemoryStore(daily_limit=5)
+    rs = _concurrent(prov, store)
+    assert sorted(r.status_code for r in rs) == [200, 502]
+    assert prov.calls == 2, "第一個失敗後，等待者應自行呼叫模型"
+    ok = next(r for r in rs if r.status_code == 200).json()
+    assert ok["cache_hit"] is False
+    assert store.quota_remaining("client-abcdefgh") == 4, "失敗的那次應退還額度，只扣成功的一次"
+
+
+def test_concurrent_low_confidence_second_calls_model_itself():
+    prov, store = SlowProvider(["low", "ok"]), MemoryStore(daily_limit=5)
+    rs = _concurrent(prov, store)
+    assert [r.status_code for r in rs] == [200, 200]
+    assert prov.calls == 2, "信心不足不寫入快取，等待者應自行呼叫模型"
+    assert [r.json()["cache_hit"] for r in rs] == [False, False]
+    assert store.quota_remaining("client-abcdefgh") == 3
+
+
+def test_concurrent_low_texture_not_coalesced():
+    prov, store = SlowProvider(["ok"]), MemoryStore(daily_limit=5)
+    sky = b64(Image.new("RGB", (200, 200), (135, 206, 235)))
+    rs = _concurrent(prov, store, image=sky)
+    assert prov.calls == 2 and all(r.json()["cache_hit"] is False for r in rs)
+
+
+def test_inflight_cleaned_up_after_exception():
+    """擁有者發生例外後，之後的請求不應卡住或被錯誤合併。"""
+    prov, store = SlowProvider(["fail", "fail", "ok"], delay=0.05), MemoryStore(daily_limit=5)
+    app = create_app(prov, store)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+            body = {"image": b64(tower())}
+            r1 = await c.post("/api/identify", json=body, headers=H)
+            r2 = await asyncio.wait_for(c.post("/api/identify", json=body, headers=H), timeout=5)
+            r3 = await asyncio.wait_for(c.post("/api/identify", json=body, headers=H), timeout=5)
+            return r1, r2, r3
+
+    r1, r2, r3 = asyncio.run(run())
+    assert (r1.status_code, r2.status_code, r3.status_code) == (502, 502, 200)
+    assert store.quota_remaining("client-abcdefgh") == 4
+
+
+# ---------- 儲存層選擇 ----------
+def test_store_postgres_requires_database_url(monkeypatch):
+    monkeypatch.setenv("STORE", "postgres")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        create_app(MockProvider())
+
+
+def test_store_defaults_to_memory(monkeypatch):
+    from app.main import store_from_env
+    monkeypatch.delenv("STORE", raising=False)
+    monkeypatch.setenv("DAILY_FREE_LIMIT", "7")
+    s = store_from_env()
+    assert isinstance(s, MemoryStore) and s.daily_limit == 7
+
+
+def test_store_unknown_value_rejected(monkeypatch):
+    monkeypatch.setenv("STORE", "postgress")
+    with pytest.raises(RuntimeError, match="STORE"):
+        create_app(MockProvider())
+
+
+def test_cancelled_model_call_refunds_quota():
+    """請求在模型呼叫途中被取消（例如使用者關掉分頁），額度要退還。"""
+    import asyncio
+
+    import httpx
+
+    class Slow(CountingProvider):
+        async def identify(self, image_bytes, page_url, page_title=None):
+            self.calls += 1
+            await asyncio.sleep(10)
+
+    prov, store = Slow(), MemoryStore(daily_limit=3)
+    app = create_app(prov, store)
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+            task = asyncio.create_task(c.post("/api/identify", json={"image": b64(tower())}, headers=H))
+            while prov.calls == 0:
+                await asyncio.sleep(0.01)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+    asyncio.run(go())
+    assert prov.calls == 1 and store.quota_remaining(H["X-Client-Id"]) == 3

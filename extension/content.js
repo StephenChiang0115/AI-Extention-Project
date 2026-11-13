@@ -130,6 +130,10 @@
       script = resp.data;
       renderScript(script);
     } catch (e) {
+      // 背景腳本等太久會被 Chrome 終止（約 30 秒），或擴充功能剛重新載入：換成看得懂的說明
+      if (/message port closed|Receiving end does not exist|Extension context invalidated/i.test(String(e?.message || e))) {
+        e = new Error("等待伺服器太久，連線被瀏覽器中斷了。伺服器可能剛喚醒或模型較慢，請再試一次");
+      }
       showMessage("抱歉，這裡有點模糊或連線出了問題，再框選一次試試吧！\n（" + (e.message || e) + "）", "apologetic", true);
     }
   }

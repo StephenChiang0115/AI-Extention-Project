@@ -8,7 +8,10 @@
 3. 在任何 http／https 網頁點工具列的擴充功能圖示（或按 Alt+Shift+L），拖曳框選畫面。mock 模式下不論框選什麼，都會回傳「台北 101」，用來驗證流程。
 4. 想看統計：瀏覽器打開 `http://localhost:8080/api/stats`。
 
-執行測試：雙擊 `run-tests.bat`（37 項；自動化執行可加 `/nopause`）。
+執行測試：雙擊 `run-tests.bat`（68 項，其中 15 項資料庫測試要設 `TEST_DATABASE_URL` 才會跑；自動化執行可加 `/nopause`）。
+
+## 免費部署到網路上
+全部使用免費、不需信用卡的服務：Render（後端）＋ Neon（Postgres 資料庫）＋ Gemini Flash-Lite（線上模型）。步驟見 `docs/deploy.md`。
 
 ## 接上 LM Studio（真實 AI 辨識）
 1. 在 LM Studio 下載並載入**支援圖片輸入**的模型（例如 Qwen2.5-VL、Gemma 3）。
@@ -23,12 +26,14 @@
 - `backend/`：FastAPI 後端（`app/`）、測試（`tests/`）、`Dockerfile`
 - `extension/`：Chrome 擴充功能
 - `scripts/`：辨識品質評估（`eval_landmarks.py`）與壓測（`loadtest.py`）工具，說明見 `scripts/README.md`
+- `docs/deploy.md`、`render.yaml`：免費部署指南與 Render 設定
+- `devlog/`：工作計畫與開發日誌
 - `CLAUDE.md`：專案背景與接續工作的說明
 
 ## 進度
 - [x] 階段 1：後端骨架
 - [x] 階段 2：Chrome Extension
 - [x] 階段 3：快取與每日額度
-- [~] 階段 4：部署到雲端：Dockerfile 已強化（非 root、套件釘版本），待確認平台
-- [~] 階段 5：壓測與成本統計：壓測腳本已完成並在本機 mock 驗證，待部署後量測
-- [~] 階段 6：接上真實模型（LM Studio）：程式與評估腳本已完成，待真實模型實測
+- [~] 階段 4：免費部署（Render + Neon）：程式與設定完成、本機 Postgres 驗證通過，待註冊帳號後實際部署
+- [~] 階段 5：壓測與成本統計：壓測腳本已完成，待部署後量測
+- [~] 階段 6：接上真實模型（LM Studio／Gemini）：程式與評估腳本已完成，待真實模型實測

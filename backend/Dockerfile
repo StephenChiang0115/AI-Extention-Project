@@ -1,4 +1,4 @@
-# 後端容器映像（預設部署目標：Google Cloud Run，平台會以 $PORT 指定埠號）
+# 後端容器映像（部署目標：Render Free，平台會以 $PORT 指定埠號）
 FROM python:3.12-slim
 
 # 即時輸出日誌、不產生 .pyc、pip 不保留下載快取以縮小映像

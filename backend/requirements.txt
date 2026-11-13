@@ -7,3 +7,5 @@ httpx==0.28.1
 pydantic==2.14.3
 Pillow==13.0.0
 python-dotenv==1.2.4
+psycopg[binary]==3.3.9
+psycopg-pool==3.3.3
